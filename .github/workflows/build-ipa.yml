@@ -1,0 +1,75 @@
+# Compila el .ipa de iOS en un runner de macOS.
+#
+# El binario sale SIN FIRMAR (no hay cuenta de Apple Developer en el repo).
+# Para instalarlo en el iPhone hay que firmarlo en el momento de la
+# instalación con tu propio Apple ID, usando Sideloadly o AltStore desde un
+# computador. Ver README-IOS.md.
+#
+# Se ejecuta en cada push a main y también a mano desde la pestaña Actions.
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Necesario para que el job pueda crear releases.
+permissions:
+  contents: write
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Dependencies
+        run: flutter pub get
+
+      - name: Tests
+        run: flutter test
+
+      - name: Build iOS (sin firma)
+        run: flutter build ios --release --no-codesign
+
+      # `--no-codesign` deja el .app listo; el .ipa es ese .app dentro de
+      # una carpeta Payload comprimida en zip.
+      - name: Empaquetar IPA
+        run: |
+          mkdir -p build/ios/ipa/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
+          cd build/ios/ipa
+          zip -qry Agendaservi-unsigned.ipa Payload
+
+      - name: Publicar artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: Agendaservi-unsigned-ipa
+          path: build/ios/ipa/Agendaservi-unsigned.ipa
+          retention-days: 30
+
+      # Además del artefacto, se publica como release para poder descargarlo
+      # sin entrar al detalle del workflow.
+      - name: Publicar release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: IPA build ${{ github.run_number }}
+          body: |
+            IPA sin firmar generado automáticamente desde `${{ github.sha }}`.
+            Instálalo en el iPhone firmándolo con tu Apple ID mediante
+            Sideloadly o AltStore (instrucciones en README-IOS.md).
+          files: build/ios/ipa/Agendaservi-unsigned.ipa

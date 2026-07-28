@@ -1,0 +1,45 @@
+name: agendaservi
+description: "Agendaservi — calendario, finanzas, ciclo, notas y hábitos."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # Estado
+  flutter_riverpod: ^2.6.1
+
+  # Navegación
+  go_router: ^14.6.2
+
+  # Red
+  dio: ^5.7.0
+
+  # Almacenamiento
+  shared_preferences: ^2.3.3
+  flutter_secure_storage: ^9.2.2
+
+  # Formato / i18n
+  intl: ^0.20.1
+
+  # Gráficas
+  fl_chart: ^0.69.2
+
+  # Plataforma
+  url_launcher: ^6.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
