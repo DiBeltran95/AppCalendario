@@ -15,6 +15,7 @@ import '../../shared/widgets/glass_card.dart';
 import '../../shared/widgets/panel_parts.dart';
 import '../../shared/widgets/progress_ring.dart';
 import '../../shared/widgets/skeleton.dart';
+import '../calendar/day_detail_header.dart';
 import '../shell/dashboard_controller.dart';
 import 'habit_check.dart';
 import 'habit_sheet.dart';
@@ -51,11 +52,23 @@ class HabitsPanel extends ConsumerWidget {
         const SizedBox(height: AppSpacing.lg),
 
         if (state.selectedDay != null) ...[
-          SelectedDayHeader(
+          DayDetailHeader(
             dateStr: state.selectedDay!,
-            subtitle: 'Progreso de hábitos',
-            icon: Icons.self_improvement_rounded,
             onClear: controller.clearSelection,
+            emptyLabel: 'Aún no tienes hábitos que marcar.',
+            chips: [
+              if (habits.isNotEmpty)
+                DaySummaryChip(
+                  label: '${dayLogs.length} de ${habits.length} cumplidos',
+                  color: dayLogs.length == habits.length
+                      ? AppColors.gold
+                      : context.colors.accent,
+                  emoji: dayLogs.length == habits.length ? '🔥' : null,
+                  icon: dayLogs.length == habits.length
+                      ? null
+                      : Icons.check_circle_outline_rounded,
+                ),
+            ],
           ),
           const SizedBox(height: AppSpacing.lg),
         ],

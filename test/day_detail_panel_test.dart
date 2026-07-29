@@ -100,7 +100,23 @@ void main() {
     await pumpPanel(tester, stateWith(selectedDay: birthdayDate));
 
     expect(find.text('Ana Gómez'), findsOneWidget);
-    expect(find.text('Cumple 30 años'), findsOneWidget);
+    // La edad va como número grande junto a su unidad.
+    expect(find.text('30'), findsOneWidget);
+    expect(find.text('años'), findsOneWidget);
+    // Y con un atajo para felicitar por WhatsApp.
+    expect(find.text('Felicitar'), findsOneWidget);
+    // Las iniciales hacen de avatar.
+    expect(find.text('AG'), findsOneWidget);
+  });
+
+  testWidgets('la cabecera resume el día sin repetir los nombres',
+      (tester) async {
+    await pumpPanel(tester, stateWith(selectedDay: holidayDate));
+
+    // La pastilla dice el tipo de día...
+    expect(find.text('Festivo'), findsOneWidget);
+    // ...y el nombre concreto aparece una sola vez, en la ficha.
+    expect(find.text('Día del Trabajo'), findsOneWidget);
   });
 
   testWidgets('al seleccionar un día con evento, se ve el evento',

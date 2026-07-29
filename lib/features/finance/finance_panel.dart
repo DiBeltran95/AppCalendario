@@ -5,9 +5,11 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_module.dart';
 import '../../app/theme/app_motion.dart';
 import '../../app/theme/app_spacing.dart';
+import '../../core/utils/date_utils.dart';
 import '../../shared/widgets/app_feedback.dart';
 import '../../shared/widgets/panel_parts.dart';
 import '../../shared/widgets/skeleton.dart';
+import '../calendar/day_detail_header.dart';
 import '../shell/dashboard_controller.dart';
 import 'finance_insights.dart';
 import 'tabs/accounts_tab.dart';
@@ -100,12 +102,45 @@ class FinancePanel extends ConsumerWidget {
               const SizedBox(height: AppSpacing.md),
 
               if (state.selectedDay != null) ...[
-                SelectedDayHeader(
-                  dateStr: state.selectedDay!,
-                  subtitle: 'Filtrando finanzas por este día',
-                  icon: Icons.filter_alt_rounded,
-                  accent: AppColors.gold,
-                  onClear: controller.clearSelection,
+                Builder(
+                  builder: (context) {
+                    final day = state.dayFor(state.selectedDay);
+                    final income = day?.incomeTotal ?? 0;
+                    final expense = day?.expenseTotal ?? 0;
+                    final pending = day?.occurrences
+                            .where((o) => !o.verificado)
+                            .length ??
+                        0;
+
+                    return DayDetailHeader(
+                      dateStr: state.selectedDay!,
+                      accent: AppColors.gold,
+                      onClear: controller.clearSelection,
+                      emptyLabel: 'Sin movimientos este día.',
+                      chips: [
+                        if (income > 0)
+                          DaySummaryChip(
+                            label: AppCurrency.format(income),
+                            color: AppColors.income,
+                            icon: Icons.arrow_upward_rounded,
+                          ),
+                        if (expense > 0)
+                          DaySummaryChip(
+                            label: AppCurrency.format(expense),
+                            color: AppColors.expense,
+                            icon: Icons.arrow_downward_rounded,
+                          ),
+                        if (pending > 0)
+                          DaySummaryChip(
+                            label: pending == 1
+                                ? '1 pendiente'
+                                : '$pending pendientes',
+                            color: AppColors.warning,
+                            icon: Icons.schedule_rounded,
+                          ),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: AppSpacing.md),
               ],

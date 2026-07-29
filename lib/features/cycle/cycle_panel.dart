@@ -14,6 +14,7 @@ import '../../shared/widgets/glass_card.dart';
 import '../../shared/widgets/panel_parts.dart';
 import '../../shared/widgets/progress_ring.dart';
 import '../../shared/widgets/skeleton.dart';
+import '../calendar/day_detail_header.dart';
 import '../shell/dashboard_controller.dart';
 import 'cycle_sheet.dart';
 import 'cycle_wheel.dart';
@@ -49,12 +50,31 @@ class CyclePanel extends ConsumerWidget {
         const SizedBox(height: AppSpacing.lg),
 
         if (state.selectedDay != null) ...[
-          SelectedDayHeader(
+          DayDetailHeader(
             dateStr: state.selectedDay!,
-            subtitle: details?.phase.label ?? 'Fuera del rango analizable',
-            icon: Icons.water_drop_rounded,
             accent: details?.phase.color ?? AppColors.phasePeriod,
             onClear: controller.clearSelection,
+            emptyLabel: 'Fuera del rango analizable.',
+            chips: [
+              if (details != null) ...[
+                DaySummaryChip(
+                  label: details.phase.label,
+                  color: details.phase.color,
+                  emoji: details.phase.badge,
+                  icon: Icons.water_drop_rounded,
+                ),
+                DaySummaryChip(
+                  label: 'Día ${details.dayInCurrentCycle}',
+                  color: details.phase.color,
+                  icon: Icons.calendar_today_rounded,
+                ),
+                DaySummaryChip(
+                  label: 'Fertilidad ${details.phase.fertilityChance.toLowerCase()}',
+                  color: details.phase.color,
+                  icon: Icons.child_care_rounded,
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: AppSpacing.lg),
         ],

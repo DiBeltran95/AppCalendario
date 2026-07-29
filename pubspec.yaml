@@ -38,8 +38,24 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
 
 flutter:
   uses-material-design: true
   assets:
     - assets/images/
+
+# Icono de la app, generado desde el logo de Agendaservi.
+# Regenerar con: dart run flutter_launcher_icons
+flutter_launcher_icons:
+  image_path: assets/icon/app_icon.png
+
+  android: true
+  adaptive_icon_background: "#0B141A"
+  adaptive_icon_foreground: assets/icon/app_icon_foreground.png
+
+  ios: true
+  # iOS no admite transparencia en el icono: se aplana sobre el fondo oscuro
+  # de la marca en lugar de dejar que Apple lo rellene de negro.
+  remove_alpha_ios: true
+  background_color_ios: "#0B141A"

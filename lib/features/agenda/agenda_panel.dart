@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/providers.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_module.dart';
+import '../../app/theme/app_motion.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/utils/date_utils.dart';
@@ -17,6 +19,7 @@ import '../../shared/widgets/glass_card.dart';
 import '../../shared/widgets/panel_parts.dart';
 import '../../shared/widgets/skeleton.dart';
 import '../calendar/calendar_day.dart';
+import '../calendar/day_detail_header.dart';
 import '../shell/dashboard_controller.dart';
 import 'event_categories.dart';
 import 'event_sheet.dart';
@@ -43,15 +46,15 @@ class AgendaPanel extends ConsumerWidget {
         AppSpacing.xxxl,
       ),
       children: [
-        HintBar(text: AppModule.agenda.hint),
-        const SizedBox(height: AppSpacing.lg),
-
         if (state.loading)
           const ListSkeleton(count: 3)
         else if (day != null)
           ..._buildDayDetail(context, ref, day, controller)
-        else
+        else ...[
+          HintBar(text: AppModule.agenda.hint),
+          const SizedBox(height: AppSpacing.lg),
           ..._buildMonthOverview(context, ref, state),
+        ],
       ],
     );
   }
@@ -64,72 +67,123 @@ class AgendaPanel extends ConsumerWidget {
     CalendarDay day,
     DashboardController controller,
   ) {
-    final subtitleParts = <String>[
-      if (day.hasEvents) '${day.events.length} evento(s)',
-      if (day.hasBirthdays) '${day.birthdays.length} cumpleaños',
-    ];
+    final colors = context.colors;
+    final year = AppDate.parse(day.dateStr).year;
+    const pink = Color(0xFFF06292);
+
+    // El color del día lo marca lo más señalado que tenga.
+    final tone = day.holiday != null
+        ? AppColors.danger
+        : day.hasBirthdays
+            ? pink
+            : day.importantDay != null
+                ? AppColors.gold
+                : colors.accent;
 
     return [
-      SelectedDayHeader(
+      DayDetailHeader(
         dateStr: day.dateStr,
-        subtitle: subtitleParts.isEmpty ? 'Sin compromisos' : subtitleParts.join(' · '),
-        icon: day.holiday != null
-            ? Icons.celebration_rounded
-            : day.hasBirthdays
-                ? Icons.cake_rounded
-                : Icons.event_rounded,
+        accent: tone,
         onClear: controller.clearSelection,
+        emptyLabel: 'Día libre: sin eventos ni cumpleaños.',
+        // Las pastillas dicen QUÉ TIPO de día es; los nombres concretos van en
+        // las fichas de abajo, para no repetir lo mismo dos veces.
+        chips: [
+          if (day.holiday != null)
+            const DaySummaryChip(
+              label: 'Festivo',
+              color: AppColors.danger,
+              emoji: '🎉',
+            ),
+          if (day.importantDay != null)
+            const DaySummaryChip(
+              label: 'Día especial',
+              color: AppColors.gold,
+              emoji: '★',
+            ),
+          if (day.hasBirthdays)
+            DaySummaryChip(
+              label: day.birthdays.length == 1
+                  ? '1 cumpleaños'
+                  : '${day.birthdays.length} cumpleaños',
+              color: pink,
+              emoji: '🎂',
+            ),
+          if (day.hasEvents)
+            DaySummaryChip(
+              label: day.events.length == 1
+                  ? '1 evento'
+                  : '${day.events.length} eventos',
+              color: colors.accent,
+              icon: Icons.event_rounded,
+            ),
+        ],
       ),
       const SizedBox(height: AppSpacing.lg),
 
       if (day.holiday != null) ...[
-        _InfoCard(
-          icon: Icons.celebration_rounded,
-          color: AppColors.danger,
-          title: day.holiday!.displayName,
-          subtitle: 'Festivo nacional · Día no laboral',
+        FadeSlideIn(
+          child: _DayNoteCard(
+            icon: Icons.celebration_rounded,
+            color: AppColors.danger,
+            title: day.holiday!.displayName,
+            subtitle: 'Festivo nacional',
+            badge: 'Día no laboral',
+          ),
         ),
         const SizedBox(height: AppSpacing.md),
       ],
 
       if (day.importantDay != null) ...[
-        _InfoCard(
-          icon: Icons.star_rounded,
-          color: AppColors.gold,
-          title: day.importantDay!.nombre,
-          subtitle: day.importantDay!.descripcion ??
-              day.importantDay!.categoria ??
-              'Día especial',
+        FadeSlideIn(
+          index: 1,
+          child: _DayNoteCard(
+            icon: Icons.star_rounded,
+            color: AppColors.gold,
+            title: day.importantDay!.nombre,
+            subtitle: day.importantDay!.descripcion ??
+                day.importantDay!.categoria ??
+                'Día especial',
+            badge: day.importantDay!.categoria,
+          ),
         ),
         const SizedBox(height: AppSpacing.md),
       ],
 
-      if (day.hasEvents) ...[
-        const SectionTitle(title: 'Eventos', icon: Icons.schedule_rounded),
-        for (var i = 0; i < day.events.length; i++)
-          FadeSlideIn(
-            index: i,
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.md),
-              child: _EventCard(event: day.events[i], dateStr: day.dateStr),
-            ),
-          ),
-      ],
-
       if (day.hasBirthdays) ...[
-        const SizedBox(height: AppSpacing.sm),
-        const SectionTitle(title: 'Cumpleaños', icon: Icons.cake_rounded),
+        SectionTitle(
+          title: 'Cumpleaños',
+          icon: Icons.cake_rounded,
+          color: pink,
+          trailing: _CountBadge(value: day.birthdays.length, color: pink),
+        ),
         for (var i = 0; i < day.birthdays.length; i++)
           FadeSlideIn(
             index: i,
             child: Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
-              child: _BirthdayCard(
-                birthday: day.birthdays[i],
-                year: DateTime.now().year,
-              ),
+              child: _BirthdayCard(birthday: day.birthdays[i], year: year),
             ),
           ),
+        const SizedBox(height: AppSpacing.sm),
+      ],
+
+      if (day.hasEvents) ...[
+        SectionTitle(
+          title: 'Eventos',
+          icon: Icons.schedule_rounded,
+          trailing: _CountBadge(value: day.events.length, color: colors.accent),
+        ),
+        for (var i = 0; i < day.events.length; i++)
+          FadeSlideIn(
+            index: i,
+            child: _EventCard(
+              event: day.events[i],
+              dateStr: day.dateStr,
+              isLast: i == day.events.length - 1,
+            ),
+          ),
+        const SizedBox(height: AppSpacing.sm),
       ],
 
       if (!day.hasEvents &&
@@ -143,14 +197,15 @@ class AgendaPanel extends ConsumerWidget {
           actionLabel: 'Crear evento',
           onAction: () => showEventSheet(context, dateStr: day.dateStr),
           compact: true,
+        )
+      else ...[
+        const SizedBox(height: AppSpacing.sm),
+        PanelActionButton(
+          label: 'Nuevo evento',
+          icon: Icons.add_rounded,
+          onPressed: () => showEventSheet(context, dateStr: day.dateStr),
         ),
-
-      const SizedBox(height: AppSpacing.lg),
-      PanelActionButton(
-        label: 'Nuevo evento',
-        icon: Icons.add_rounded,
-        onPressed: () => showEventSheet(context, dateStr: day.dateStr),
-      ),
+      ],
     ];
   }
 
@@ -185,7 +240,6 @@ class AgendaPanel extends ConsumerWidget {
               label: 'Eventos del mes',
               value: monthEvents.length.toDouble(),
               icon: Icons.event_rounded,
-              integer: true,
             ),
           ),
           const SizedBox(width: AppSpacing.md),
@@ -194,7 +248,6 @@ class AgendaPanel extends ConsumerWidget {
               label: 'Cumpleaños',
               value: birthdaysThisMonth.toDouble(),
               icon: Icons.cake_rounded,
-              integer: true,
             ),
           ),
         ],
@@ -202,7 +255,7 @@ class AgendaPanel extends ConsumerWidget {
       const SizedBox(height: AppSpacing.xl),
 
       if (upcoming.isEmpty)
-        EmptyState(
+        const EmptyState(
           icon: Icons.event_available_rounded,
           title: 'Nada por delante',
           message:
@@ -210,7 +263,10 @@ class AgendaPanel extends ConsumerWidget {
           compact: true,
         )
       else ...[
-        const SectionTitle(title: 'Próximos eventos', icon: Icons.upcoming_rounded),
+        const SectionTitle(
+          title: 'Próximos eventos',
+          icon: Icons.upcoming_rounded,
+        ),
         for (var i = 0; i < upcoming.length && i < 8; i++)
           FadeSlideIn(
             index: i,
@@ -229,12 +285,304 @@ class AgendaPanel extends ConsumerWidget {
   }
 }
 
-/// Tarjeta de un evento con acciones y el recordatorio de WhatsApp.
+/// Contador junto al título de una sección.
+class _CountBadge extends StatelessWidget {
+  const _CountBadge({required this.value, required this.color});
+
+  final int value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(AppRadius.full),
+      ),
+      child: Text(
+        '$value',
+        style: TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w800,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+/// Ficha de festivo o día importante.
+class _DayNoteCard extends StatelessWidget {
+  const _DayNoteCard({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    this.badge,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final String? badge;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            color.withValues(alpha: 0.16),
+            color.withValues(alpha: 0.04),
+          ],
+        ),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(AppRadius.chip),
+            ),
+            child: Icon(icon, size: 24, color: color),
+          ),
+          const SizedBox(width: AppSpacing.lg),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: text.titleSmall),
+                const SizedBox(height: 2),
+                Text(subtitle, style: text.bodySmall?.copyWith(fontSize: 12)),
+                if (badge != null) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  StatusPill(
+                    label: badge!,
+                    color: color,
+                    icon: Icons.event_available_rounded,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Tarjeta de cumpleaños: iniciales, edad grande y felicitación por WhatsApp.
+class _BirthdayCard extends ConsumerWidget {
+  const _BirthdayCard({required this.birthday, required this.year});
+
+  final Birthday birthday;
+  final int year;
+
+  static const Color _pink = Color(0xFFF06292);
+
+  String get _initials {
+    final parts = birthday.nombre
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
+  }
+
+  Future<void> _congratulate(BuildContext context) async {
+    final message = birthday.mensaje?.isNotEmpty == true
+        ? birthday.mensaje!
+        : '¡Feliz cumpleaños, ${birthday.nombre.split(' ').first}! 🎂';
+
+    // Con teléfono se abre el chat de esa persona; sin él, el selector.
+    final phone = birthday.telefono?.replaceAll(RegExp(r'\D'), '') ?? '';
+    final uri = Uri.parse(
+      phone.isEmpty
+          ? 'https://wa.me/?text=${Uri.encodeComponent(message)}'
+          : 'https://wa.me/$phone?text=${Uri.encodeComponent(message)}',
+    );
+
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && context.mounted) {
+      AppFeedback.showError(context, 'No pudimos abrir WhatsApp');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.colors;
+    final text = Theme.of(context).textTheme;
+    final age = birthday.ageOn(year);
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            _pink.withValues(alpha: 0.16),
+            colors.bgTertiary.withValues(alpha: 0.4),
+          ],
+        ),
+        border: Border.all(color: _pink.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              // Avatar con iniciales: identifica sin necesitar una foto.
+              Container(
+                width: 52,
+                height: 52,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [_pink, Color(0xFFAB47BC)],
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  _initials,
+                  style: text.titleMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      birthday.nombre,
+                      style: text.titleSmall,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (birthday.mensaje?.isNotEmpty == true) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        '"${birthday.mensaje}"',
+                        style: text.bodySmall?.copyWith(
+                          fontSize: 11.5,
+                          fontStyle: FontStyle.italic,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (age != null) ...[
+                const SizedBox(width: AppSpacing.sm),
+                Column(
+                  children: [
+                    AnimatedCounter(
+                      value: age.toDouble(),
+                      formatter: (v) => v.round().toString(),
+                      style: text.displaySmall?.copyWith(
+                        fontSize: 32,
+                        height: 1,
+                        color: _pink,
+                      ),
+                    ),
+                    Text(
+                      age == 1 ? 'año' : 'años',
+                      style: text.labelSmall?.copyWith(
+                        color: _pink.withValues(alpha: 0.8),
+                        fontSize: 9.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => _congratulate(context),
+                  icon: const Icon(Icons.chat_rounded, size: 16),
+                  label: const Text('Felicitar'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF25D366),
+                    foregroundColor: const Color(0xFF0B141A),
+                    minimumSize: const Size(0, 40),
+                    textStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              IconButton(
+                onPressed: () => _delete(context, ref),
+                icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                color: AppColors.danger,
+                tooltip: 'Eliminar',
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(40, 40),
+                  backgroundColor: AppColors.danger.withValues(alpha: 0.1),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final ok = await AppFeedback.confirm(
+      context,
+      title: 'Eliminar cumpleaños',
+      message: '¿Eliminar el cumpleaños de ${birthday.nombre}?',
+    );
+    if (!ok) return;
+
+    try {
+      await ref.read(eventsRepositoryProvider).deleteBirthday(birthday.id);
+      await ref.read(dashboardControllerProvider.notifier).refresh();
+      if (context.mounted) {
+        AppFeedback.showSuccess(context, 'Cumpleaños eliminado');
+      }
+    } on ApiException catch (e) {
+      if (context.mounted) AppFeedback.showError(context, e.message);
+    }
+  }
+}
+
+/// Evento del día, sobre un raíl de tiempo vertical.
 class _EventCard extends ConsumerStatefulWidget {
-  const _EventCard({required this.event, required this.dateStr});
+  const _EventCard({
+    required this.event,
+    required this.dateStr,
+    required this.isLast,
+  });
 
   final CalendarEvent event;
   final String dateStr;
+  final bool isLast;
 
   @override
   ConsumerState<_EventCard> createState() => _EventCardState();
@@ -244,14 +592,20 @@ class _EventCardState extends ConsumerState<_EventCard> {
   bool _showReminder = false;
   bool _busy = false;
 
+  Color _accentOf(BuildContext context) {
+    final event = widget.event;
+    if (!event.isFinancial) return context.colors.accent;
+    return event.tipoTransaccion == TxKind.income
+        ? AppColors.income
+        : AppColors.expense;
+  }
+
   Future<void> _delete() async {
     final event = widget.event;
-    final scope = event.isRecurring
-        ? await _askScope(context)
-        : SeriesScope.instance;
-    if (scope == null) return;
+    final scope =
+        event.isRecurring ? await _askScope(context) : SeriesScope.instance;
+    if (scope == null || !mounted) return;
 
-    if (!mounted) return;
     final confirmed = await AppFeedback.confirm(
       context,
       title: 'Eliminar evento',
@@ -323,63 +677,91 @@ class _EventCardState extends ConsumerState<_EventCard> {
     final text = Theme.of(context).textTheme;
     final event = widget.event;
     final category = EventCategory.resolve(event.categoria);
+    final accent = _accentOf(context);
 
-    final accent = event.isFinancial
-        ? (event.tipoTransaccion == TxKind.income
-            ? AppColors.income
-            : AppColors.expense)
-        : colors.accent;
-
-    return AppCard(
-      accent: accent,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.sm,
-                  vertical: AppSpacing.xs,
+          // Raíl de tiempo: ancla el evento en el día de un vistazo.
+          SizedBox(
+            width: 50,
+            child: Column(
+              children: [
+                Text(
+                  event.shortTime ?? '· ·',
+                  style: text.labelMedium?.copyWith(
+                    color: event.shortTime == null
+                        ? colors.textTertiary
+                        : colors.textPrimary,
+                    fontSize: 12.5,
+                  ),
                 ),
-                decoration: BoxDecoration(
-                  color: colors.bgHover,
-                  borderRadius: BorderRadius.circular(AppRadius.chip),
-                ),
-                child: Column(
-                  children: [
-                    Icon(category.icon, size: 15, color: accent),
-                    const SizedBox(height: 2),
-                    Text(
-                      event.shortTime ?? '--:--',
-                      style: text.labelSmall?.copyWith(
-                        color: colors.textSecondary,
-                        fontSize: 10,
+                const SizedBox(height: 4),
+                Container(
+                  width: 9,
+                  height: 9,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: accent,
+                    boxShadow: [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.4),
+                        blurRadius: 6,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
+                if (!widget.isLast)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      margin: const EdgeInsets.symmetric(vertical: 2),
+                      color: colors.divider,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: widget.isLast ? 0 : AppSpacing.md,
               ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: colors.bgTertiary,
+                  borderRadius: BorderRadius.circular(AppRadius.card),
+                  border: Border.all(color: colors.border),
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      event.titulo,
-                      style: text.titleSmall,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Icon(category.icon, size: 15, color: accent),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            event.titulo,
+                            style: text.titleSmall?.copyWith(fontSize: 14),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
+
                     if (event.ubicacion.isNotEmpty) ...[
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 4),
                       Row(
                         children: [
                           Icon(Icons.place_outlined,
                               size: 12, color: colors.textTertiary),
-                          const SizedBox(width: 3),
+                          const SizedBox(width: 4),
                           Expanded(
                             child: Text(
                               event.ubicacion,
@@ -390,159 +772,101 @@ class _EventCardState extends ConsumerState<_EventCard> {
                         ],
                       ),
                     ],
+
+                    if (event.isFinancial || event.isRecurring) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      Wrap(
+                        spacing: AppSpacing.xs,
+                        runSpacing: AppSpacing.xs,
+                        children: [
+                          if (event.isFinancial)
+                            StatusPill(
+                              label: AppCurrency.format(event.costo),
+                              color: accent,
+                            ),
+                          if (event.isFinancial)
+                            StatusPill(
+                              label: event.isPaid ? 'Pagado' : 'Pendiente',
+                              color: event.isPaid
+                                  ? colors.success
+                                  : AppColors.warning,
+                              icon: event.isPaid
+                                  ? Icons.check_circle_rounded
+                                  : Icons.hourglass_empty_rounded,
+                            ),
+                          if (event.isRecurring)
+                            StatusPill(
+                              label: event.frecuencia.label,
+                              color: colors.textSecondary,
+                              icon: Icons.repeat_rounded,
+                            ),
+                        ],
+                      ),
+                    ],
+
                     const SizedBox(height: AppSpacing.xs),
-                    Wrap(
-                      spacing: AppSpacing.xs,
-                      runSpacing: AppSpacing.xs,
+                    Row(
                       children: [
-                        if (event.isRecurring)
-                          StatusPill(
-                            label: event.frecuencia.label,
-                            color: colors.textSecondary,
-                            icon: Icons.repeat_rounded,
-                          ),
                         if (event.isFinancial)
-                          StatusPill(
-                            label: AppCurrency.format(event.costo),
-                            color: accent,
-                          ),
-                        if (event.isFinancial)
-                          StatusPill(
-                            label: event.isPaid ? 'Pagado' : 'Pendiente',
-                            color: event.isPaid
-                                ? colors.success
-                                : AppColors.warning,
+                          _MiniAction(
                             icon: event.isPaid
-                                ? Icons.check_circle_rounded
-                                : Icons.hourglass_empty_rounded,
+                                ? Icons.undo_rounded
+                                : Icons.check_circle_outline_rounded,
+                            tooltip: event.isPaid
+                                ? 'Marcar pendiente'
+                                : 'Marcar pagado',
+                            color: event.isPaid
+                                ? colors.textSecondary
+                                : colors.success,
+                            onTap: _busy ? null : _togglePayment,
                           ),
+                        _MiniAction(
+                          icon: Icons.chat_rounded,
+                          tooltip: 'Recordatorio de WhatsApp',
+                          color: _showReminder
+                              ? colors.accent
+                              : colors.textSecondary,
+                          onTap: () =>
+                              setState(() => _showReminder = !_showReminder),
+                        ),
+                        const Spacer(),
+                        _MiniAction(
+                          icon: Icons.edit_rounded,
+                          tooltip: 'Editar',
+                          color: colors.textSecondary,
+                          onTap: _busy
+                              ? null
+                              : () => showEventSheet(
+                                    context,
+                                    dateStr: widget.dateStr,
+                                    event: event,
+                                  ),
+                        ),
+                        _MiniAction(
+                          icon: Icons.delete_outline_rounded,
+                          tooltip: 'Eliminar',
+                          color: AppColors.danger,
+                          onTap: _busy ? null : _delete,
+                        ),
                       ],
+                    ),
+
+                    AnimatedSize(
+                      duration: AppMotion.scale(context, AppMotion.standard),
+                      curve: AppMotion.emphasizedCurve,
+                      alignment: Alignment.topCenter,
+                      child: _showReminder
+                          ? Padding(
+                              padding:
+                                  const EdgeInsets.only(top: AppSpacing.sm),
+                              child: WhatsAppPreview(event: event),
+                            )
+                          : const SizedBox(width: double.infinity),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              if (event.isFinancial)
-                _IconAction(
-                  icon: event.isPaid
-                      ? Icons.undo_rounded
-                      : Icons.check_circle_outline_rounded,
-                  tooltip: event.isPaid
-                      ? 'Marcar como pendiente'
-                      : 'Marcar como pagado',
-                  color: event.isPaid ? colors.textSecondary : colors.success,
-                  onTap: _busy ? null : _togglePayment,
-                ),
-              _IconAction(
-                icon: Icons.chat_rounded,
-                tooltip: 'Recordatorio de WhatsApp',
-                color: _showReminder ? colors.accent : colors.textSecondary,
-                onTap: () => setState(() => _showReminder = !_showReminder),
-              ),
-              const Spacer(),
-              _IconAction(
-                icon: Icons.edit_rounded,
-                tooltip: 'Editar',
-                color: colors.textSecondary,
-                onTap: _busy
-                    ? null
-                    : () => showEventSheet(
-                          context,
-                          dateStr: widget.dateStr,
-                          event: event,
-                        ),
-              ),
-              _IconAction(
-                icon: Icons.delete_outline_rounded,
-                tooltip: 'Eliminar',
-                color: AppColors.danger,
-                onTap: _busy ? null : _delete,
-              ),
-            ],
-          ),
-
-          AnimatedSize(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOutCubic,
-            alignment: Alignment.topCenter,
-            child: _showReminder
-                ? Padding(
-                    padding: const EdgeInsets.only(top: AppSpacing.sm),
-                    child: WhatsAppPreview(event: event),
-                  )
-                : const SizedBox(width: double.infinity),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BirthdayCard extends ConsumerWidget {
-  const _BirthdayCard({required this.birthday, required this.year});
-
-  final Birthday birthday;
-  final int year;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final colors = context.colors;
-    final text = Theme.of(context).textTheme;
-    final age = birthday.ageOn(year);
-
-    return AppCard(
-      accent: const Color(0xFFF06292),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Row(
-        children: [
-          const Text('🎂', style: TextStyle(fontSize: 26)),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(birthday.nombre, style: text.titleSmall),
-                if (age != null)
-                  Text('Cumple $age años', style: text.bodySmall),
-                if (birthday.mensaje != null && birthday.mensaje!.isNotEmpty)
-                  Text(
-                    '"${birthday.mensaje}"',
-                    style: text.bodySmall?.copyWith(
-                      fontStyle: FontStyle.italic,
-                      color: colors.textTertiary,
-                    ),
-                  ),
-              ],
             ),
-          ),
-          _IconAction(
-            icon: Icons.delete_outline_rounded,
-            tooltip: 'Eliminar',
-            color: AppColors.danger,
-            onTap: () async {
-              final ok = await AppFeedback.confirm(
-                context,
-                title: 'Eliminar cumpleaños',
-                message: '¿Eliminar el cumpleaños de ${birthday.nombre}?',
-              );
-              if (!ok) return;
-              try {
-                await ref
-                    .read(eventsRepositoryProvider)
-                    .deleteBirthday(birthday.id);
-                await ref.read(dashboardControllerProvider.notifier).refresh();
-                if (context.mounted) {
-                  AppFeedback.showSuccess(context, 'Cumpleaños eliminado');
-                }
-              } on ApiException catch (e) {
-                if (context.mounted) AppFeedback.showError(context, e.message);
-              }
-            },
           ),
         ],
       ),
@@ -615,77 +939,33 @@ class _UpcomingTile extends StatelessWidget {
   }
 }
 
-class _InfoCard extends StatelessWidget {
-  const _InfoCard({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.subtitle,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-
-    return AppCard(
-      accent: color,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Row(
-        children: [
-          Icon(icon, size: 22, color: color),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: text.titleSmall),
-                Text(subtitle, style: text.bodySmall),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _MetricTile extends StatelessWidget {
   const _MetricTile({
     required this.label,
     required this.value,
     required this.icon,
-    this.integer = false,
   });
 
   final String label;
   final double value;
   final IconData icon;
-  final bool integer;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final text = Theme.of(context).textTheme;
-    final accent = colors.accent;
 
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 18, color: accent),
+          Icon(icon, size: 18, color: colors.accent),
           const SizedBox(height: AppSpacing.sm),
           AnimatedCounter(
             value: value,
-            formatter: integer
-                ? (v) => v.round().toString()
-                : AppCurrency.format,
-            style: text.headlineSmall?.copyWith(color: accent),
+            formatter: (v) => v.round().toString(),
+            style: text.headlineSmall?.copyWith(color: colors.accent),
           ),
           Text(label, style: text.bodySmall?.copyWith(fontSize: 11.5)),
         ],
@@ -694,8 +974,8 @@ class _MetricTile extends StatelessWidget {
   }
 }
 
-class _IconAction extends StatelessWidget {
-  const _IconAction({
+class _MiniAction extends StatelessWidget {
+  const _MiniAction({
     required this.icon,
     required this.tooltip,
     required this.color,
@@ -711,11 +991,12 @@ class _IconAction extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       onPressed: onTap,
-      icon: Icon(icon, size: 18),
+      icon: Icon(icon, size: 17),
       color: color,
       tooltip: tooltip,
       visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+      constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
+      padding: EdgeInsets.zero,
     );
   }
 }

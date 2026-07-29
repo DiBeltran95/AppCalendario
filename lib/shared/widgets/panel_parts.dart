@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_motion.dart';
 import '../../app/theme/app_spacing.dart';
-import '../../core/utils/date_utils.dart';
+
 
 /// Franja con la pista de interacción del módulo.
 class HintBar extends StatelessWidget {
@@ -40,70 +40,6 @@ class HintBar extends StatelessWidget {
                     color: colors.textSecondary,
                   ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Cabecera del día seleccionado, con botón para quitar el filtro.
-class SelectedDayHeader extends StatelessWidget {
-  const SelectedDayHeader({
-    super.key,
-    required this.dateStr,
-    required this.subtitle,
-    required this.onClear,
-    this.icon = Icons.calendar_today_rounded,
-    this.accent,
-  });
-
-  final String dateStr;
-  final String subtitle;
-  final VoidCallback onClear;
-  final IconData icon;
-  final Color? accent;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final text = Theme.of(context).textTheme;
-    final color = accent ?? colors.accent;
-    final relative = AppDate.relativeLabel(dateStr);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
-        vertical: AppSpacing.md,
-      ),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  relative == null
-                      ? AppDate.weekdayLong(dateStr)
-                      : '$relative · ${AppDate.medium(dateStr)}',
-                  style: text.titleSmall,
-                ),
-                Text(subtitle, style: text.bodySmall?.copyWith(fontSize: 11.5)),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: onClear,
-            icon: const Icon(Icons.close_rounded, size: 18),
-            color: colors.textSecondary,
-            tooltip: 'Quitar filtro de día',
           ),
         ],
       ),

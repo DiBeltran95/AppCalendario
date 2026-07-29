@@ -15,6 +15,7 @@ import '../../shared/widgets/app_feedback.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/panel_parts.dart';
 import '../../shared/widgets/skeleton.dart';
+import '../calendar/day_detail_header.dart';
 import '../shell/dashboard_controller.dart';
 import 'note_sheet.dart';
 
@@ -47,13 +48,20 @@ class NotesPanel extends ConsumerWidget {
         const SizedBox(height: AppSpacing.lg),
 
         if (selected != null) ...[
-          SelectedDayHeader(
+          DayDetailHeader(
             dateStr: selected,
-            subtitle: notes.isEmpty
-                ? 'Sin notas'
-                : '${notes.length} nota${notes.length == 1 ? '' : 's'}',
-            icon: Icons.edit_note_rounded,
             onClear: controller.clearSelection,
+            emptyLabel: 'Sin notas en este día.',
+            chips: [
+              if (notes.isNotEmpty)
+                DaySummaryChip(
+                  label: notes.length == 1
+                      ? '1 nota'
+                      : '${notes.length} notas',
+                  color: context.colors.accent,
+                  icon: Icons.edit_note_rounded,
+                ),
+            ],
           ),
           const SizedBox(height: AppSpacing.lg),
         ] else
