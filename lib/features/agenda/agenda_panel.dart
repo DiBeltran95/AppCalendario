@@ -17,7 +17,6 @@ import '../../shared/widgets/glass_card.dart';
 import '../../shared/widgets/panel_parts.dart';
 import '../../shared/widgets/skeleton.dart';
 import '../calendar/calendar_day.dart';
-import '../calendar/month_highlights.dart';
 import '../shell/dashboard_controller.dart';
 import 'event_categories.dart';
 import 'event_sheet.dart';
@@ -162,29 +161,34 @@ class AgendaPanel extends ConsumerWidget {
     WidgetRef ref,
     DashboardState state,
   ) {
+    final today = AppDate.today();
+    final upcoming = state.monthData.events
+        .where((e) => e.fecha.compareTo(today) >= 0)
+        .toList()
+      ..sort((a, b) {
+        final byDate = a.fecha.compareTo(b.fecha);
+        if (byDate != 0) return byDate;
+        return (a.hora ?? '').compareTo(b.hora ?? '');
+      });
+
     final monthEvents = state.monthData.events;
     final birthdaysThisMonth = state.bootstrap.cumpleanos.where((b) {
       final month = int.tryParse(b.monthDay.split('-').first);
       return month == state.month;
     }).length;
-    final holidaysThisMonth =
-        state.holidays.where((h) => h.date.startsWith(state.monthPrefix)).length;
-
-    final hasAnything =
-        monthEvents.isNotEmpty || birthdaysThisMonth > 0 || holidaysThisMonth > 0;
 
     return [
       Row(
         children: [
           Expanded(
             child: _MetricTile(
-              label: 'Eventos',
+              label: 'Eventos del mes',
               value: monthEvents.length.toDouble(),
               icon: Icons.event_rounded,
               integer: true,
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: _MetricTile(
               label: 'Cumpleaños',
@@ -193,30 +197,34 @@ class AgendaPanel extends ConsumerWidget {
               integer: true,
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: _MetricTile(
-              label: 'Festivos',
-              value: holidaysThisMonth.toDouble(),
-              icon: Icons.celebration_rounded,
-              integer: true,
-            ),
-          ),
         ],
       ),
       const SizedBox(height: AppSpacing.xl),
 
-      // Aquí se ve QUIÉN cumple años y QUÉ festivo cae, con nombre propio.
-      if (hasAnything)
-        const MonthHighlights(module: AppModule.agenda)
-      else
-        const EmptyState(
+      if (upcoming.isEmpty)
+        EmptyState(
           icon: Icons.event_available_rounded,
-          title: 'Mes despejado',
+          title: 'Nada por delante',
           message:
-              'No hay eventos, cumpleaños ni festivos. Mantén pulsado un día del calendario para crear algo.',
+              'No quedan eventos este mes. Mantén pulsado un día del calendario para crear uno.',
           compact: true,
-        ),
+        )
+      else ...[
+        const SectionTitle(title: 'Próximos eventos', icon: Icons.upcoming_rounded),
+        for (var i = 0; i < upcoming.length && i < 8; i++)
+          FadeSlideIn(
+            index: i,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: _UpcomingTile(
+                event: upcoming[i],
+                onTap: () => ref
+                    .read(dashboardControllerProvider.notifier)
+                    .selectDay(upcoming[i].fecha),
+              ),
+            ),
+          ),
+      ],
     ];
   }
 }
@@ -536,6 +544,71 @@ class _BirthdayCard extends ConsumerWidget {
               }
             },
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UpcomingTile extends StatelessWidget {
+  const _UpcomingTile({required this.event, required this.onTap});
+
+  final CalendarEvent event;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final text = Theme.of(context).textTheme;
+    final date = AppDate.parse(event.fecha);
+
+    return AppCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+            decoration: BoxDecoration(
+              color: colors.accent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(AppRadius.chip),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  '${date.day}',
+                  style: text.titleMedium?.copyWith(color: colors.accent),
+                ),
+                Text(
+                  AppDate.monthShort[date.month - 1],
+                  style: text.labelSmall?.copyWith(
+                    color: colors.accent.withValues(alpha: 0.8),
+                    fontSize: 9.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  event.titulo,
+                  style: text.titleSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  event.shortTime ?? 'Todo el día',
+                  style: text.bodySmall?.copyWith(fontSize: 11.5),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded, color: colors.textTertiary),
         ],
       ),
     );

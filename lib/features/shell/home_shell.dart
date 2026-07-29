@@ -32,10 +32,17 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
 
-  // El panel arranca bajo para que el calendario —ahora con contenido real en
-  // cada celda— se vea completo sin tener que arrastrar nada.
-  static const double _collapsed = 0.34;
-  static const double _expanded = 0.94;
+  /// Panel en reposo: el calendario manda.
+  static const double _collapsed = 0.42;
+
+  /// Panel con un día seleccionado. Deja ver un par de semanas del calendario
+  /// —para no perder de vista qué día se tocó— y el detalle completo debajo.
+  static const double _detail = 0.66;
+
+  static const double _expanded = 0.92;
+
+  /// Scroll interno del panel, para volver arriba al cambiar de día.
+  ScrollController? _panelScroll;
 
   @override
   void dispose() {
@@ -43,11 +50,58 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     super.dispose();
   }
 
+  /// Sube el panel hasta que el detalle del día quede a la vista.
+  ///
+  /// Sin esto el detalle se dibujaba igual, pero por debajo del pliegue: al
+  /// tocar un día parecía que no pasaba nada y había que arrastrar a mano.
+  void _revealDetail() {
+    if (!_sheetController.isAttached) return;
+
+    // El detalle empieza arriba del todo.
+    final scroll = _panelScroll;
+    if (scroll != null && scroll.hasClients && scroll.offset > 0) {
+      scroll.jumpTo(0);
+    }
+
+    // Si el usuario ya lo tenía más arriba, se respeta su posición.
+    if (_sheetController.size >= _detail - 0.01) return;
+
+    _sheetController.animateTo(
+      _detail,
+      duration: AppMotion.emphasized,
+      curve: AppMotion.emphasizedCurve,
+    );
+  }
+
+  /// Al quitar la selección, el panel vuelve a dejar sitio al calendario.
+  void _collapseSheet() {
+    if (!_sheetController.isAttached) return;
+    if (_sheetController.size <= _collapsed + 0.01) return;
+
+    _sheetController.animateTo(
+      _collapsed,
+      duration: AppMotion.emphasized,
+      curve: AppMotion.emphasizedCurve,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final module = ref.watch(activeModuleProvider);
     final state = ref.watch(dashboardControllerProvider);
+
+    // Tocar un día debe mostrar su detalle, como en la versión web.
+    ref.listen<String?>(
+      dashboardControllerProvider.select((s) => s.selectedDay),
+      (previous, next) {
+        if (next != null) {
+          _revealDetail();
+        } else {
+          _collapseSheet();
+        }
+      },
+    );
 
     return Scaffold(
       appBar: const AppHeader(),
@@ -75,14 +129,20 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             DraggableScrollableSheet(
               controller: _sheetController,
               initialChildSize: _collapsed,
-              minChildSize: 0.14,
+              minChildSize: 0.16,
               maxChildSize: _expanded,
               snap: true,
-              snapSizes: const [0.14, _collapsed, 0.62, _expanded],
-              builder: (context, scrollController) => _Panel(
-                module: module,
-                scrollController: scrollController,
-              ),
+              snapSizes: const [0.16, _collapsed, _detail, _expanded],
+              builder: (context, scrollController) {
+                // Se guarda para poder devolver el panel al principio cuando
+                // se selecciona otro día.
+                _panelScroll = scrollController;
+                return _Panel(
+                  module: module,
+                  scrollController: scrollController,
+                  hasSelection: state.selectedDay != null,
+                );
+              },
             ),
           ],
         ),
@@ -100,10 +160,18 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 /// módulo. El contenido se intercambia con un fundido cruzado, que es la
 /// transición correcta entre pares del mismo nivel.
 class _Panel extends StatelessWidget {
-  const _Panel({required this.module, required this.scrollController});
+  const _Panel({
+    required this.module,
+    required this.scrollController,
+    this.hasSelection = false,
+  });
 
   final AppModule module;
   final ScrollController scrollController;
+
+  /// Con un día seleccionado el asa se tiñe del color del módulo: señala que
+  /// el panel trae contenido de ese día.
+  final bool hasSelection;
 
   @override
   Widget build(BuildContext context) {
@@ -130,11 +198,13 @@ class _Panel extends StatelessWidget {
           // Asa de arrastre.
           Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-            child: Container(
-              width: 40,
+            child: AnimatedContainer(
+              duration: AppMotion.scale(context, AppMotion.standard),
+              curve: AppMotion.emphasizedCurve,
+              width: hasSelection ? 52 : 40,
               height: 4,
               decoration: BoxDecoration(
-                color: colors.textTertiary,
+                color: hasSelection ? colors.accent : colors.textTertiary,
                 borderRadius: BorderRadius.circular(AppRadius.full),
               ),
             ),

@@ -15,7 +15,6 @@ import '../../shared/widgets/app_feedback.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/panel_parts.dart';
 import '../../shared/widgets/skeleton.dart';
-import '../calendar/month_highlights.dart';
 import '../shell/dashboard_controller.dart';
 import 'note_sheet.dart';
 
@@ -66,16 +65,6 @@ class NotesPanel extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleSmall,
             ),
           ),
-
-        // Qué se escribió este mes, con su texto, sin abrir día por día.
-        if (selected == null && notes.isNotEmpty) ...[
-          const MonthHighlights(
-            module: AppModule.notes,
-            title: 'Notas del mes',
-            maxItems: 5,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-        ],
 
         if (state.loading)
           const ListSkeleton(count: 3)

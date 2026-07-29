@@ -78,6 +78,8 @@ class AppCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
 
+    final accentColor = accent;
+
     return Material(
       color: background ?? colors.bgTertiary,
       borderRadius: BorderRadius.circular(radius),
@@ -85,30 +87,37 @@ class AppCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: colors.border),
-            // La banda se hace con un borde grueso a la izquierda para no
-            // añadir un widget extra por tarjeta.
-            gradient: accent == null
-                ? null
-                : LinearGradient(
-                    colors: [
-                      accent!.withValues(alpha: 0.10),
-                      Colors.transparent,
-                    ],
-                    stops: const [0, 0.45],
-                  ),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (accent != null)
-                Container(width: 4, color: accent),
-              Expanded(child: Padding(padding: padding, child: child)),
-            ],
-          ),
+        // La banda del acento va superpuesta, no como hijo de un Row: dentro
+        // de una lista la altura no está acotada y un Row con `stretch` no
+        // sabría hasta dónde estirarse. El recorte del Material la redondea.
+        child: Stack(
+          children: [
+            Container(
+              padding: EdgeInsets.only(left: accentColor == null ? 0 : 4),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(radius),
+                border: Border.all(color: colors.border),
+                gradient: accentColor == null
+                    ? null
+                    : LinearGradient(
+                        colors: [
+                          accentColor.withValues(alpha: 0.10),
+                          Colors.transparent,
+                        ],
+                        stops: const [0, 0.45],
+                      ),
+              ),
+              child: Padding(padding: padding, child: child),
+            ),
+            if (accentColor != null)
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: 4,
+                child: ColoredBox(color: accentColor),
+              ),
+          ],
         ),
       ),
     );
