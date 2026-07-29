@@ -1,18 +1,18 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_module.dart';
 import '../../app/theme/app_motion.dart';
-import '../../app/theme/app_spacing.dart';
 import '../../data/models/cycle.dart';
 import 'calendar_day.dart';
+import 'day_content.dart';
 
 /// Una celda del calendario.
 ///
-/// Cambia por completo de lenguaje visual según el módulo activo: los mismos
-/// 30 días son puntos de evento, gotas de ciclo, importes o un mapa de calor.
+/// A diferencia de la versión web —que solo pintaba puntos— cada celda muestra
+/// **contenido real**: el nombre del cumpleañero, el título del evento, el
+/// importe del día. El número del día va arriba a la izquierda para dejar el
+/// resto del alto a la información, como en el mes de Google Calendar.
 class DayCell extends StatelessWidget {
   const DayCell({
     super.key,
@@ -29,13 +29,14 @@ class DayCell extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
+  /// Etiquetas visibles antes del contador "+N".
+  static const int _maxVisibleChips = 2;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final text = Theme.of(context).textTheme;
-
-    final decoration = _decorationFor(context);
-    final numberColor = _numberColor(context);
+    final chips = DayContent.chipsFor(data, module, colors.accent);
+    final surface = _surface(context);
 
     return Semantics(
       button: true,
@@ -44,38 +45,53 @@ class DayCell extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         onLongPress: onLongPress,
-        // Se mantiene el doble toque como alias del pulsado largo: quien venía
+        // El doble toque se mantiene como alias del pulsado largo: quien viene
         // de la web ya lo tiene aprendido.
         onDoubleTap: onLongPress,
         child: AnimatedContainer(
           duration: AppMotion.scale(context, AppMotion.quick),
           curve: AppMotion.enter,
-          decoration: decoration,
-          child: Stack(
+          padding: const EdgeInsets.fromLTRB(3, 3, 3, 4),
+          decoration: BoxDecoration(
+            color: surface.background,
+            gradient: surface.gradient,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? colors.accent
+                  : surface.borderColor ?? Colors.transparent,
+              width: selected ? 1.8 : 1,
+            ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: colors.accent.withValues(alpha: 0.28),
+                      blurRadius: 14,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Anillo de "hoy", que respira.
-              if (data.isToday) _TodayRing(color: colors.accent),
-
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 5),
+              _DayNumber(
+                day: data.day,
+                isToday: data.isToday,
+                color: surface.numberColor,
+                accent: colors.accent,
+                // Marca discreta cuando hay contenido que no cupo.
+                extra: chips.length > _maxVisibleChips
+                    ? chips.length - _maxVisibleChips
+                    : 0,
+              ),
+              const SizedBox(height: 2),
+              Expanded(
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      '${data.day}',
-                      style: text.labelLarge?.copyWith(
-                        color: numberColor,
-                        fontWeight: data.isToday || selected
-                            ? FontWeight.w800
-                            : FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    SizedBox(
-                      height: 14,
-                      child: _Indicators(data: data, module: module),
-                    ),
+                    for (final chip in chips.take(_maxVisibleChips))
+                      _ChipBar(chip: chip),
                   ],
                 ),
               ),
@@ -86,134 +102,116 @@ class DayCell extends StatelessWidget {
     );
   }
 
-  // --- Aspecto de la celda según el módulo ---
+  // --- Aspecto del fondo según módulo y estado del día ---
 
-  BoxDecoration _decorationFor(BuildContext context) {
+  _CellSurface _surface(BuildContext context) {
     final colors = context.colors;
-    final radius = BorderRadius.circular(AppRadius.chip);
-
-    Color? background;
-    Border? border;
-    Gradient? gradient;
 
     switch (module) {
       case AppModule.cycle:
-        final phase = data.cycle?.phase;
-        switch (phase) {
-          case CyclePhase.period:
-            gradient = const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.phasePeriodDark, AppColors.phasePeriod],
-            );
-          case CyclePhase.predictedPeriod:
-            border = Border.all(color: AppColors.phasePeriod, width: 1.6);
-          case CyclePhase.latePeriod:
-            background = AppColors.phaseLate.withValues(alpha: 0.12);
-            border = Border.all(color: AppColors.phaseLate, width: 1.6);
-          case CyclePhase.fertile:
-            background = AppColors.phaseFertile.withValues(alpha: 0.2);
-            border = Border.all(
-              color: AppColors.phaseFertile.withValues(alpha: 0.8),
-              width: 1.6,
-            );
-          case CyclePhase.ovulation:
-            gradient = const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.phaseOvulationLight,
-                AppColors.phaseOvulation,
-              ],
-            );
-          case _:
-            background = colors.bgTertiary;
-        }
-
-      case AppModule.finance:
-        if (data.hasFinance) {
-          background = (data.hasPendingFinance
-                  ? AppColors.warning
-                  : AppColors.income)
-              .withValues(alpha: 0.14);
-          border = Border.all(
-            color: (data.hasPendingFinance
-                    ? AppColors.warning
-                    : AppColors.income)
-                .withValues(alpha: 0.45),
-          );
-        } else {
-          background = colors.bgTertiary;
-        }
-
-      case AppModule.notes:
-        background = data.hasNotes
-            ? colors.accent.withValues(alpha: 0.14)
-            : colors.bgTertiary;
-        if (data.hasNotes) {
-          border = Border.all(color: colors.accent.withValues(alpha: 0.4));
-        }
+        return switch (data.cycle?.phase) {
+          CyclePhase.period => const _CellSurface(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.phasePeriodDark, AppColors.phasePeriod],
+              ),
+              numberColor: Colors.white,
+            ),
+          CyclePhase.ovulation => const _CellSurface(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.phaseOvulationLight,
+                  AppColors.phaseOvulation,
+                ],
+              ),
+              numberColor: Colors.white,
+            ),
+          CyclePhase.predictedPeriod => _CellSurface(
+              background: AppColors.phasePeriod.withValues(alpha: 0.08),
+              borderColor: AppColors.phasePeriod.withValues(alpha: 0.55),
+              numberColor: AppColors.phasePeriod,
+            ),
+          CyclePhase.latePeriod => _CellSurface(
+              background: AppColors.phaseLate.withValues(alpha: 0.12),
+              borderColor: AppColors.phaseLate.withValues(alpha: 0.6),
+              numberColor: AppColors.phaseLate,
+            ),
+          CyclePhase.fertile => _CellSurface(
+              background: AppColors.phaseFertile.withValues(alpha: 0.16),
+              borderColor: AppColors.phaseFertile.withValues(alpha: 0.45),
+              numberColor: colors.textPrimary,
+            ),
+          _ => _CellSurface(
+              background: colors.bgTertiary,
+              numberColor: colors.textPrimary,
+            ),
+        };
 
       case AppModule.habits:
         final level = data.habitHeatLevel;
-        // Mapa de calor: la opacidad del acento crece con lo completado.
-        background = level < 0
-            ? colors.bgTertiary
-            : Color.lerp(
-                colors.bgTertiary,
-                colors.accent,
-                [0.0, 0.04, 0.18, 0.34, 0.55, 0.75][level + 1],
-              );
+        if (level < 0) {
+          return _CellSurface(
+            background: colors.bgTertiary,
+            numberColor: colors.textPrimary,
+          );
+        }
+        // Mapa de calor: el acento gana peso conforme se cumplen hábitos.
+        final intensity = [0.0, 0.05, 0.2, 0.38, 0.58, 0.8][level + 1];
+        return _CellSurface(
+          background: Color.lerp(colors.bgTertiary, colors.accent, intensity),
+          numberColor: intensity > 0.5 ? Colors.white : colors.textPrimary,
+        );
+
+      case AppModule.finance:
+        if (!data.hasFinance) {
+          return _CellSurface(
+            background: colors.bgTertiary,
+            numberColor: colors.textPrimary,
+          );
+        }
+        final tone = data.hasPendingFinance ? AppColors.warning : AppColors.income;
+        return _CellSurface(
+          background: tone.withValues(alpha: 0.09),
+          borderColor: tone.withValues(alpha: 0.32),
+          numberColor: colors.textPrimary,
+        );
+
+      case AppModule.notes:
+        if (!data.hasNotes) {
+          return _CellSurface(
+            background: colors.bgTertiary,
+            numberColor: colors.textPrimary,
+          );
+        }
+        return _CellSurface(
+          background: colors.accent.withValues(alpha: 0.1),
+          borderColor: colors.accent.withValues(alpha: 0.3),
+          numberColor: colors.textPrimary,
+        );
 
       case AppModule.agenda:
         if (data.holiday != null) {
-          background = AppColors.danger.withValues(alpha: 0.12);
-          border = Border.all(color: AppColors.danger.withValues(alpha: 0.35));
-        } else if (data.importantDay != null) {
-          background = AppColors.gold.withValues(alpha: 0.12);
-          border = Border.all(color: AppColors.gold.withValues(alpha: 0.35));
-        } else {
-          background = colors.bgTertiary;
+          return _CellSurface(
+            background: AppColors.danger.withValues(alpha: 0.1),
+            borderColor: AppColors.danger.withValues(alpha: 0.3),
+            numberColor: AppColors.danger,
+          );
         }
+        if (data.importantDay != null) {
+          return _CellSurface(
+            background: AppColors.gold.withValues(alpha: 0.1),
+            borderColor: AppColors.gold.withValues(alpha: 0.3),
+            numberColor: AppColors.gold,
+          );
+        }
+        return _CellSurface(
+          background: colors.bgTertiary,
+          numberColor: colors.textPrimary,
+        );
     }
-
-    return BoxDecoration(
-      color: gradient == null ? background : null,
-      gradient: gradient,
-      borderRadius: radius,
-      border: selected
-          ? Border.all(color: colors.accent, width: 2)
-          : border ?? Border.all(color: Colors.transparent),
-      boxShadow: selected
-          ? [
-              BoxShadow(
-                color: colors.accent.withValues(alpha: 0.25),
-                blurRadius: 12,
-              ),
-            ]
-          : null,
-    );
-  }
-
-  Color _numberColor(BuildContext context) {
-    final colors = context.colors;
-
-    if (module == AppModule.cycle) {
-      return switch (data.cycle?.phase) {
-        CyclePhase.period || CyclePhase.ovulation => Colors.white,
-        CyclePhase.predictedPeriod => AppColors.phasePeriod,
-        CyclePhase.latePeriod => AppColors.phaseLate,
-        _ => colors.textPrimary,
-      };
-    }
-
-    if (module == AppModule.agenda) {
-      if (data.holiday != null) return AppColors.danger;
-      if (data.importantDay != null) return AppColors.gold;
-    }
-
-    if (data.isToday) return colors.accent;
-    return colors.textPrimary;
   }
 
   String _semanticLabel() {
@@ -223,15 +221,19 @@ class DayCell extends StatelessWidget {
 
     switch (module) {
       case AppModule.agenda:
-        if (data.holiday != null) parts.add('festivo: ${data.holiday!.displayName}');
-        if (data.hasEvents) parts.add('${data.events.length} eventos');
-        if (data.hasBirthdays) parts.add('${data.birthdays.length} cumpleaños');
-      case AppModule.finance:
-        if (data.hasFinance) {
-          parts.add(data.hasPendingFinance
-              ? 'movimientos pendientes'
-              : 'movimientos registrados');
+        if (data.holiday != null) {
+          parts.add('festivo: ${data.holiday!.displayName}');
         }
+        for (final birthday in data.birthdays) {
+          parts.add('cumpleaños de ${birthday.nombre}');
+        }
+        for (final event in data.events) {
+          parts.add(event.titulo);
+        }
+      case AppModule.finance:
+        if (data.incomeTotal > 0) parts.add('ingresos registrados');
+        if (data.expenseTotal > 0) parts.add('gastos registrados');
+        if (data.hasPendingFinance) parts.add('con pendientes');
       case AppModule.cycle:
         if (data.cycle != null) parts.add(data.cycle!.phase.label);
       case AppModule.notes:
@@ -245,130 +247,131 @@ class DayCell extends StatelessWidget {
   }
 }
 
-/// Marcas bajo el número del día.
-class _Indicators extends StatelessWidget {
-  const _Indicators({required this.data, required this.module});
+/// Colores resueltos de una celda.
+class _CellSurface {
+  const _CellSurface({
+    this.background,
+    this.gradient,
+    this.borderColor,
+    required this.numberColor,
+  });
 
-  final CalendarDay data;
-  final AppModule module;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-
-    switch (module) {
-      case AppModule.agenda:
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (data.hasEvents)
-              for (var i = 0; i < math.min(3, data.events.length); i++)
-                Container(
-                  width: 4,
-                  height: 4,
-                  margin: const EdgeInsets.symmetric(horizontal: 1),
-                  decoration: BoxDecoration(
-                    color: colors.accent,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-            if (data.hasBirthdays)
-              const Padding(
-                padding: EdgeInsets.only(left: 2),
-                child: Text('🎂', style: TextStyle(fontSize: 9)),
-              ),
-            if (data.holiday != null && !data.hasEvents && !data.hasBirthdays)
-              const Text('🎉', style: TextStyle(fontSize: 9)),
-          ],
-        );
-
-      case AppModule.cycle:
-        final badge = data.cycle?.phase.badge;
-        if (badge == null) return const SizedBox.shrink();
-        return Opacity(
-          opacity: data.cycle?.phase == CyclePhase.predictedPeriod ? 0.5 : 1,
-          child: Text(badge, style: const TextStyle(fontSize: 9)),
-        );
-
-      case AppModule.finance:
-        if (!data.hasFinance) return const SizedBox.shrink();
-        return Icon(
-          Icons.payments_rounded,
-          size: 11,
-          color: data.hasPendingFinance ? AppColors.warning : AppColors.income,
-        );
-
-      case AppModule.notes:
-        if (!data.hasNotes) return const SizedBox.shrink();
-        return Icon(Icons.edit_note_rounded, size: 13, color: colors.accent);
-
-      case AppModule.habits:
-        if (data.totalHabits == 0) return const SizedBox.shrink();
-        return Text(
-          '${data.completedHabits}/${data.totalHabits}',
-          style: TextStyle(
-            fontSize: 8.5,
-            fontWeight: FontWeight.w700,
-            color: data.habitCompletion >= 1
-                ? Colors.white
-                : colors.textSecondary,
-          ),
-        );
-    }
-  }
+  final Color? background;
+  final Gradient? gradient;
+  final Color? borderColor;
+  final Color numberColor;
 }
 
-/// Anillo del día de hoy: late despacio para no competir con la selección.
-class _TodayRing extends StatefulWidget {
-  const _TodayRing({required this.color});
+/// Número del día, arriba a la izquierda. Hoy lleva una pastilla de acento.
+class _DayNumber extends StatelessWidget {
+  const _DayNumber({
+    required this.day,
+    required this.isToday,
+    required this.color,
+    required this.accent,
+    required this.extra,
+  });
 
+  final int day;
+  final bool isToday;
   final Color color;
+  final Color accent;
 
-  @override
-  State<_TodayRing> createState() => _TodayRingState();
-}
-
-class _TodayRingState extends State<_TodayRing>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2600),
-  )..repeat(reverse: true);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  /// Cuántas etiquetas quedaron fuera.
+  final int extra;
 
   @override
   Widget build(BuildContext context) {
-    if (MediaQuery.disableAnimationsOf(context)) {
-      return Positioned.fill(
-        child: DecoratedBox(
+    return Row(
+      children: [
+        AnimatedContainer(
+          duration: AppMotion.scale(context, AppMotion.quick),
+          width: 19,
+          height: 19,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.chip),
-            border: Border.all(color: widget.color.withValues(alpha: 0.5)),
+            color: isToday ? accent : Colors.transparent,
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            '$day',
+            style: TextStyle(
+              fontSize: 11.5,
+              height: 1,
+              fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+              color: isToday
+                  ? (accent.computeLuminance() > 0.45
+                      ? const Color(0xFF0B141A)
+                      : Colors.white)
+                  : color,
+            ),
           ),
         ),
-      );
-    }
-
-    return Positioned.fill(
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          final t = Curves.easeInOut.transform(_controller.value);
-          return DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadius.chip),
-              border: Border.all(
-                color: widget.color.withValues(alpha: 0.35 + t * 0.4),
-                width: 1.4,
+        const Spacer(),
+        if (extra > 0)
+          Padding(
+            padding: const EdgeInsets.only(right: 2),
+            child: Text(
+              '+$extra',
+              style: TextStyle(
+                fontSize: 8,
+                fontWeight: FontWeight.w800,
+                color: color.withValues(alpha: 0.65),
               ),
             ),
-          );
-        },
+          ),
+      ],
+    );
+  }
+}
+
+/// Barra de contenido: el nombre o título dentro de la celda.
+class _ChipBar extends StatelessWidget {
+  const _ChipBar({required this.chip});
+
+  final DayChip chip;
+
+  @override
+  Widget build(BuildContext context) {
+    final filled = chip.filled;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1.5),
+      decoration: BoxDecoration(
+        color: filled
+            ? chip.color.withValues(alpha: 0.85)
+            : chip.color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (chip.emoji != null) ...[
+            Text(chip.emoji!, style: const TextStyle(fontSize: 7.5, height: 1)),
+            const SizedBox(width: 1.5),
+          ],
+          Flexible(
+            child: Text(
+              chip.label,
+              maxLines: 1,
+              overflow: TextOverflow.clip,
+              softWrap: false,
+              style: TextStyle(
+                fontSize: 8,
+                height: 1.25,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.2,
+                color: filled
+                    ? (chip.color.computeLuminance() > 0.6
+                        ? const Color(0xFF0B141A)
+                        : Colors.white)
+                    : chip.color,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

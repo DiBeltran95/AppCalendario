@@ -32,8 +32,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
 
-  static const double _collapsed = 0.42;
-  static const double _expanded = 0.92;
+  // El panel arranca bajo para que el calendario —ahora con contenido real en
+  // cada celda— se vea completo sin tener que arrastrar nada.
+  static const double _collapsed = 0.34;
+  static const double _expanded = 0.94;
 
   @override
   void dispose() {
@@ -73,10 +75,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             DraggableScrollableSheet(
               controller: _sheetController,
               initialChildSize: _collapsed,
-              minChildSize: 0.16,
+              minChildSize: 0.14,
               maxChildSize: _expanded,
               snap: true,
-              snapSizes: const [0.16, _collapsed, _expanded],
+              snapSizes: const [0.14, _collapsed, 0.62, _expanded],
               builder: (context, scrollController) => _Panel(
                 module: module,
                 scrollController: scrollController,

@@ -14,6 +14,7 @@ import '../../shared/widgets/glass_card.dart';
 import '../../shared/widgets/panel_parts.dart';
 import '../../shared/widgets/progress_ring.dart';
 import '../../shared/widgets/skeleton.dart';
+import '../calendar/month_highlights.dart';
 import '../shell/dashboard_controller.dart';
 import 'cycle_sheet.dart';
 import 'cycle_wheel.dart';
@@ -110,6 +111,16 @@ class CyclePanel extends ConsumerWidget {
                 ],
               ),
             ),
+          ),
+        ],
+
+        // Hitos del mes: ovulación, inicio de periodo, retrasos.
+        if (state.selectedDay == null && !stats.isEmpty) ...[
+          const SizedBox(height: AppSpacing.xl),
+          const MonthHighlights(
+            module: AppModule.cycle,
+            title: 'Fechas clave del mes',
+            maxItems: 5,
           ),
         ],
 

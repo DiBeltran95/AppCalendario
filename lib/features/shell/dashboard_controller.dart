@@ -84,6 +84,9 @@ class DashboardState {
 
   String get monthLabel => AppDate.monthLabel(year, month);
 
+  /// `YYYY-MM` del mes visible, para filtrar por prefijo de fecha.
+  String get monthPrefix => '$year-${month.toString().padLeft(2, '0')}';
+
   /// Estadísticas del ciclo, calculadas una vez y reutilizadas en las ~42 celdas.
   CycleStats get cycleStats => CycleEngine.buildStats(bootstrap.cycles);
 

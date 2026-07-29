@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_colors.dart';
+import '../../../app/theme/app_module.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../calendar/month_highlights.dart';
 import '../../../shared/animations/entrance.dart';
 import '../../../shared/widgets/animated_counter.dart';
 import '../../../shared/widgets/glass_card.dart';
@@ -39,6 +41,18 @@ class SummaryTab extends StatelessWidget {
 
         FadeSlideIn(index: 1, child: _MonthSummaryCard(insights: insights)),
         const SizedBox(height: AppSpacing.md),
+
+        // Qué se mueve y cuándo, con descripción e importe.
+        if (selectedDay == null) ...[
+          FadeSlideIn(
+            index: 2,
+            child: const MonthHighlights(
+              module: AppModule.finance,
+              title: 'Movimientos y pendientes',
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+        ],
 
         FadeSlideIn(index: 2, child: _Rule503020Card(rule: insights.rule503020)),
         const SizedBox(height: AppSpacing.md),
